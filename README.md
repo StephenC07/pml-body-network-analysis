@@ -85,8 +85,10 @@ python pml_network_analysis.py \
 | `--bright-pct` | `75` | Percentile above which intensity is treated as bright background. |
 | `--thresh-pct` | `80` | Percentile for binarising the black top-hat response. |
 | `--dense-pct` | `15` | Bottom intensity percentile defining "dense" regions. |
-| `--artifact-x` | off | If set, mask all pixels with `X < value` from every slice (left-edge artefact). |
-| `--artifact-y` | off | If set, mask all pixels with `Y < value` from every slice (top-edge artefact). May be combined with `--artifact-x`. |
+| `--mask-left` | off | Mask the leftmost N pixels in every slice (reconstruction edge artefact). Alias: `--artifact-x`. |
+| `--mask-right` | off | Mask the rightmost N pixels in every slice. |
+| `--mask-top` | off | Mask the topmost N pixels in every slice. Alias: `--artifact-y`. |
+| `--mask-bottom` | off | Mask the bottommost N pixels in every slice. Any combination of edge flags may be used. |
 
 Run `python pml_network_analysis.py --help` for the full list.
 

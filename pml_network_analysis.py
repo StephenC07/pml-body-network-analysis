@@ -443,14 +443,22 @@ def parse_args(argv=None):
     p.add_argument("--bright-pct", type=float, default=DEFAULTS["bright_pct"])
     p.add_argument("--thresh-pct", type=float, default=DEFAULTS["thresh_pct"])
     p.add_argument("--dense-pct", type=float, default=DEFAULTS["dense_pct"])
-    p.add_argument("--artifact-x", type=int, default=None,
-                   help="If set, mask pixels with X < this value in every "
-                        "slice (for reconstruction edge artefacts on the "
-                        "left edge).")
-    p.add_argument("--artifact-y", type=int, default=None,
-                   help="If set, mask pixels with Y < this value in every "
-                        "slice (for reconstruction edge artefacts on the "
-                        "top edge).  May be combined with --artifact-x.")
+    # Edge-artefact masking: each flag gives the number of pixels to mask
+    # from the corresponding edge in every slice.  May be combined.  The
+    # older --artifact-x / --artifact-y names are kept as aliases for the
+    # two most common cases.
+    p.add_argument("--mask-left", "--artifact-x", dest="mask_left",
+                   type=int, default=None,
+                   help="Mask the leftmost N pixels (X < N) in every slice.")
+    p.add_argument("--mask-right", dest="mask_right",
+                   type=int, default=None,
+                   help="Mask the rightmost N pixels (X >= width - N) in every slice.")
+    p.add_argument("--mask-top", "--artifact-y", dest="mask_top",
+                   type=int, default=None,
+                   help="Mask the topmost N pixels (Y < N) in every slice.")
+    p.add_argument("--mask-bottom", dest="mask_bottom",
+                   type=int, default=None,
+                   help="Mask the bottommost N pixels (Y >= height - N) in every slice.")
     return p.parse_args(argv)
 
 
@@ -488,15 +496,25 @@ def main(argv=None):
     print(f"  PML voxels in range = {pml_mask.sum():,}", flush=True)
 
     artifact_mask = None
-    if args.artifact_x is not None or args.artifact_y is not None:
+    edges = {
+        "left":   args.mask_left,
+        "right":  args.mask_right,
+        "top":    args.mask_top,
+        "bottom": args.mask_bottom,
+    }
+    if any(v is not None for v in edges.values()):
         _, ny, nx = volume.shape
         artifact_mask = np.zeros((ny, nx), dtype=bool)
-        if args.artifact_x is not None:
-            artifact_mask[:, :args.artifact_x] = True
-            print(f"  masking X < {args.artifact_x} pixels", flush=True)
-        if args.artifact_y is not None:
-            artifact_mask[:args.artifact_y, :] = True
-            print(f"  masking Y < {args.artifact_y} pixels", flush=True)
+        if args.mask_left is not None:
+            artifact_mask[:, :args.mask_left] = True
+        if args.mask_right is not None:
+            artifact_mask[:, nx - args.mask_right:] = True
+        if args.mask_top is not None:
+            artifact_mask[:args.mask_top, :] = True
+        if args.mask_bottom is not None:
+            artifact_mask[ny - args.mask_bottom:, :] = True
+        active = ", ".join(f"{k}={v}" for k, v in edges.items() if v is not None)
+        print(f"  edge mask: {active}", flush=True)
 
     print(
         f"Running skeleton pipeline ({args.workers} worker"
@@ -539,8 +557,7 @@ def main(argv=None):
         "bright_pct": args.bright_pct,
         "thresh_pct": args.thresh_pct,
         "dense_pct": args.dense_pct,
-        "artifact_x_mask": args.artifact_x,
-        "artifact_y_mask": args.artifact_y,
+        "edge_mask_pixels": {k: v for k, v in edges.items() if v is not None},
         "pearson_r_connectivity_vs_pml_fraction": pearson_r,
         "mean_connectivity_pml_cells": float(
             grid["composite"][pml_grid > 0].mean()
