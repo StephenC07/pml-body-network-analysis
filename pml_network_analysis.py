@@ -445,7 +445,12 @@ def parse_args(argv=None):
     p.add_argument("--dense-pct", type=float, default=DEFAULTS["dense_pct"])
     p.add_argument("--artifact-x", type=int, default=None,
                    help="If set, mask pixels with X < this value in every "
-                        "slice (for reconstruction edge artefacts).")
+                        "slice (for reconstruction edge artefacts on the "
+                        "left edge).")
+    p.add_argument("--artifact-y", type=int, default=None,
+                   help="If set, mask pixels with Y < this value in every "
+                        "slice (for reconstruction edge artefacts on the "
+                        "top edge).  May be combined with --artifact-x.")
     return p.parse_args(argv)
 
 
@@ -483,11 +488,15 @@ def main(argv=None):
     print(f"  PML voxels in range = {pml_mask.sum():,}", flush=True)
 
     artifact_mask = None
-    if args.artifact_x is not None:
+    if args.artifact_x is not None or args.artifact_y is not None:
         _, ny, nx = volume.shape
         artifact_mask = np.zeros((ny, nx), dtype=bool)
-        artifact_mask[:, :args.artifact_x] = True
-        print(f"  masking X < {args.artifact_x} pixels", flush=True)
+        if args.artifact_x is not None:
+            artifact_mask[:, :args.artifact_x] = True
+            print(f"  masking X < {args.artifact_x} pixels", flush=True)
+        if args.artifact_y is not None:
+            artifact_mask[:args.artifact_y, :] = True
+            print(f"  masking Y < {args.artifact_y} pixels", flush=True)
 
     print(
         f"Running skeleton pipeline ({args.workers} worker"
@@ -531,6 +540,7 @@ def main(argv=None):
         "thresh_pct": args.thresh_pct,
         "dense_pct": args.dense_pct,
         "artifact_x_mask": args.artifact_x,
+        "artifact_y_mask": args.artifact_y,
         "pearson_r_connectivity_vs_pml_fraction": pearson_r,
         "mean_connectivity_pml_cells": float(
             grid["composite"][pml_grid > 0].mean()
