@@ -26,12 +26,18 @@ segmentation (multi-label TIFF), the pipeline:
        pixels (bottom `--dense-pct` percent after a large Gaussian
        blur) from the PML body surface, and compares that distribution
        to a random background sample.
+   11. Measures the unbiased pore-size distribution of the skeletonised
+       network: per-slice distance transform of the inverted skeleton,
+       local maxima give inscribed-circle radii of the gaps between
+       fibres.  Reports median, IQR and percentages of pores large
+       enough to accommodate a nucleosome (>=11 nm), TRiC (>=17 nm)
+       and PA28-capped proteasome (>=20 nm).
 
 Outputs (written to --output-dir):
 
     summary.json
         Parameters used, per-grid-cell means, Pearson correlation,
-        median distances.
+        median distances, pore-size statistics.
     connectivity_grid.csv
         grid_n x grid_n composite connectivity score.
     fiber_density_grid.csv
@@ -42,8 +48,13 @@ Outputs (written to --output-dir):
         grid_n x grid_n PML volume fraction.
     distances_dense_px.csv, distances_background_px.csv
         Euclidean distance (bin-4 pixels) from the PML body surface.
+    pore_diameters_nm.csv
+        All measured pore diameters in nanometres.
     diagnostic_figure.png
         Four-panel visual summary for quality control.
+    pore_size_histogram.png
+        Pore-diameter histogram with reference lines at nucleosome,
+        TRiC and PA28-capped-proteasome sizes.
 
 Reference:
     Pražák V et al. In situ molecular architecture of eYFP-PML.I
@@ -72,7 +83,7 @@ import matplotlib.pyplot as plt
 import mrcfile
 import numpy as np
 import tifffile
-from scipy.ndimage import convolve, distance_transform_edt
+from scipy.ndimage import convolve, distance_transform_edt, maximum_filter
 from skimage import exposure, morphology, restoration
 from skimage.filters import gaussian
 from skimage.morphology import binary_dilation, black_tophat, disk, skeletonize
@@ -317,6 +328,53 @@ def dense_distance_analysis(
 
 
 # ────────────────────────────────────────────────────────────────────
+# Pore-size analysis (mesh gap-size distribution)
+# ────────────────────────────────────────────────────────────────────
+
+def pore_size_distribution(
+    skel_stack: np.ndarray,
+    pml_mask: np.ndarray,
+    high_conn_mask: np.ndarray | None = None,
+    pixel_size_nm: float = 1.0,
+    min_radius_px: float = 1.0,
+    max_filter_size: int = 5,
+) -> np.ndarray:
+    """Measure pore diameters per slice by distance-transform on the inverted
+    skeleton.
+
+    At every slice, the distance transform of the non-skeleton region gives,
+    for each pixel, the distance to the nearest fibre.  Local maxima of that
+    transform are pore centres and their values are the inscribed-circle
+    radii.  Returned values are pore diameters in nanometres, filtered to
+    the PML interior mask (and optionally to high-connectivity tiles).
+    """
+    nz, ny, nx = skel_stack.shape
+    if high_conn_mask is None:
+        # Project PML mask to 2D: any slice with PML at that pixel = interior
+        high_conn_mask = pml_mask.max(axis=0)
+
+    mask_dt_2d = distance_transform_edt(high_conn_mask)
+    diameters_nm = []
+    for i in range(nz):
+        skel = skel_stack[i] & high_conn_mask
+        if skel.sum() < 20 or high_conn_mask.sum() < 500:
+            continue
+        dt = distance_transform_edt(~skel)
+        dt_masked = dt * high_conn_mask
+        local_max = maximum_filter(dt_masked, size=max_filter_size)
+        peaks = (dt_masked == local_max) & (dt_masked > min_radius_px)
+        # Reject peaks within 5 px of the frame edge
+        peaks[:5, :] = False
+        peaks[-5:, :] = False
+        peaks[:, :5] = False
+        peaks[:, -5:] = False
+        # Reject pores whose inscribed circle extends beyond the mask
+        peaks &= dt_masked <= mask_dt_2d
+        diameters_nm.extend((dt_masked[peaks] * 2 * pixel_size_nm).tolist())
+    return np.array(diameters_nm)
+
+
+# ────────────────────────────────────────────────────────────────────
 # Diagnostic figure
 # ────────────────────────────────────────────────────────────────────
 
@@ -406,6 +464,38 @@ def plot_diagnostic(
     axes[1, 1].legend(fontsize=8)
     axes[1, 1].grid(alpha=0.3)
 
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_pore_histogram(
+    diameters_nm: np.ndarray,
+    out_path: Path,
+    reference_lines: tuple = ((11.0, "nucleosome"), (17.0, "TRiC"), (20.0, "PA28")),
+    bin_width_nm: float = 1.0,
+) -> None:
+    """Histogram of pore diameters with complex-size reference lines."""
+    if len(diameters_nm) == 0:
+        return
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    d_max = min(float(np.percentile(diameters_nm, 99.5)), 60.0)
+    bins = np.arange(0, d_max + bin_width_nm, bin_width_nm)
+    ax.hist(diameters_nm, bins=bins, color="steelblue", alpha=0.75, edgecolor="none")
+    med = float(np.median(diameters_nm))
+    ax.axvline(med, color="black", ls="--", lw=1.6,
+               label=f"median = {med:.1f} nm")
+    colours = ["#d95f02", "#7570b3", "#e7298a"]
+    for (val, label), c in zip(reference_lines, colours):
+        frac = float((diameters_nm >= val).mean()) * 100
+        ax.axvline(val, color=c, ls=":", lw=1.5,
+                   label=f"{label} = {val:.0f} nm  ({frac:.1f}% >= )")
+    ax.set_xlim(0, d_max)
+    ax.set_xlabel("Pore diameter (nm)")
+    ax.set_ylabel("Count")
+    ax.set_title(f"PML body interior pore-size distribution  (n = {len(diameters_nm):,})")
+    ax.legend(fontsize=9, loc="upper right")
+    ax.grid(alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -538,6 +628,12 @@ def main(argv=None):
         volume, pml_mask, artifact_mask=artifact_mask,
     )
 
+    print("Measuring pore-size distribution...", flush=True)
+    pore_diameters_nm = pore_size_distribution(
+        skel_stack, pml_mask,
+        pixel_size_nm=args.pixel_size_nm,
+    )
+
     out = args.output_dir
     np.savetxt(out / "connectivity_grid.csv", grid["composite"], delimiter=",", fmt="%.6f")
     np.savetxt(out / "fiber_density_grid.csv", grid["fiber_norm"], delimiter=",", fmt="%.6f")
@@ -545,6 +641,7 @@ def main(argv=None):
     np.savetxt(out / "pml_volume_fraction_grid.csv", pml_grid, delimiter=",", fmt="%.6f")
     np.savetxt(out / "distances_dense_px.csv", distances["dense"], delimiter=",", fmt="%.3f")
     np.savetxt(out / "distances_background_px.csv", distances["background"], delimiter=",", fmt="%.3f")
+    np.savetxt(out / "pore_diameters_nm.csv", pore_diameters_nm, delimiter=",", fmt="%.3f")
 
     summary = {
         "tomogram": str(args.tomogram),
@@ -575,6 +672,21 @@ def main(argv=None):
         "background_distance_median_nm": float(
             np.median(distances["background"]) * args.pixel_size_nm
         ) if len(distances["background"]) else None,
+        "pore_n": int(len(pore_diameters_nm)),
+        "pore_median_diameter_nm": float(np.median(pore_diameters_nm))
+            if len(pore_diameters_nm) else None,
+        "pore_mean_diameter_nm": float(np.mean(pore_diameters_nm))
+            if len(pore_diameters_nm) else None,
+        "pore_iqr_nm": [
+            float(np.percentile(pore_diameters_nm, 25)),
+            float(np.percentile(pore_diameters_nm, 75)),
+        ] if len(pore_diameters_nm) else None,
+        "pct_pores_ge_11nm_nucleosome": float(100 * (pore_diameters_nm >= 11).mean())
+            if len(pore_diameters_nm) else None,
+        "pct_pores_ge_17nm_TRiC": float(100 * (pore_diameters_nm >= 17).mean())
+            if len(pore_diameters_nm) else None,
+        "pct_pores_ge_20nm_PA28": float(100 * (pore_diameters_nm >= 20).mean())
+            if len(pore_diameters_nm) else None,
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
 
@@ -586,12 +698,25 @@ def main(argv=None):
         out_path=out / "diagnostic_figure.png",
     )
 
+    if len(pore_diameters_nm):
+        plot_pore_histogram(
+            pore_diameters_nm,
+            out_path=out / "pore_size_histogram.png",
+        )
+
     print(f"\nDone.  Outputs in {out.resolve()}", flush=True)
     print(f"  Pearson r = {pearson_r:.3f}", flush=True)
     if summary["dense_distance_median_nm"] is not None:
         print(
             f"  Dense median = {summary['dense_distance_median_nm']:.0f} nm, "
             f"bg median = {summary['background_distance_median_nm']:.0f} nm",
+            flush=True,
+        )
+    if summary["pore_median_diameter_nm"] is not None:
+        iqr = summary["pore_iqr_nm"]
+        print(
+            f"  Pore median = {summary['pore_median_diameter_nm']:.1f} nm "
+            f"(IQR {iqr[0]:.1f}-{iqr[1]:.1f} nm, n = {summary['pore_n']:,})",
             flush=True,
         )
 

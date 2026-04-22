@@ -39,6 +39,12 @@ For a single tomogram plus a paired PML body segmentation, the script
 10. Computes the Euclidean distance from each dense pixel (bottom 15 percent
     of a Gaussian-smoothed slice) to the nearest PML body surface voxel,
     and compares the distribution to a size-matched random background sample.
+11. Measures the unbiased pore-size distribution of the skeletonised network:
+    per-slice distance transform of the inverted skeleton, local maxima give
+    inscribed-circle radii of the gaps between fibres. Reports the median,
+    IQR and percentages of pores large enough to admit complexes of biological
+    interest (>=11 nm nucleosome, >=17 nm TRiC, >=20 nm PA28-capped
+    proteasome).
 
 ## Installation
 
@@ -106,14 +112,16 @@ All outputs are written into `--output-dir`:
 
 | File | Contents |
 |------|----------|
-| `summary.json` | All parameters, Pearson `r`, mean connectivity inside/outside the PML body, median dense/background distances in pixels and nm. |
+| `summary.json` | All parameters, Pearson `r`, mean connectivity inside/outside the PML body, median dense/background distances in pixels and nm, pore-size statistics. |
 | `connectivity_grid.csv` | grid_n x grid_n composite connectivity score. |
 | `fiber_density_grid.csv` | Normalised fibre density per tile. |
 | `branch_density_grid.csv` | Normalised branch-point density per tile. |
 | `pml_volume_fraction_grid.csv` | PML volume fraction per tile. |
 | `distances_dense_px.csv` | Dense-pixel distances from the PML surface, in bin-4 pixels. |
 | `distances_background_px.csv` | Random background distances, in bin-4 pixels. |
+| `pore_diameters_nm.csv` | All measured pore diameters in nanometres. |
 | `diagnostic_figure.png` | Four-panel QC figure: connectivity overlay, PML volume fraction, connectivity vs PML volume fraction scatter, distance histogram. |
+| `pore_size_histogram.png` | Pore-diameter histogram with reference lines at nucleosome (11 nm), TRiC (17 nm) and PA28-capped proteasome (20 nm) diameters. |
 
 ## Importable API
 
