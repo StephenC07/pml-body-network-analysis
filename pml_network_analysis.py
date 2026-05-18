@@ -293,6 +293,7 @@ def dense_mask_slice(
 def dense_distance_analysis(
     volume: np.ndarray,
     pml_mask: np.ndarray,
+    dense_pct: float = DEFAULTS["dense_pct"],
     z_step: int = DEFAULTS["dense_z_step"],
     dense_subsample: int = DEFAULTS["dense_subsample"],
     bg_sample_per_slice: int = DEFAULTS["bg_sample_per_slice"],
@@ -309,7 +310,7 @@ def dense_distance_analysis(
 
     dense, bg = [], []
     for zi in range(z0, z1 + 1, z_step):
-        dm = dense_mask_slice(volume[zi], artifact_mask=artifact_mask)
+        dm = dense_mask_slice(volume[zi], pct=dense_pct, artifact_mask=artifact_mask)
         dense_pts = np.argwhere(dm)
         if len(dense_pts) > 0:
             for r, c in dense_pts[::dense_subsample]:
@@ -625,7 +626,9 @@ def main(argv=None):
 
     print("Computing dense-region distance analysis...", flush=True)
     distances = dense_distance_analysis(
-        volume, pml_mask, artifact_mask=artifact_mask,
+        volume, pml_mask,
+        dense_pct=args.dense_pct,
+        artifact_mask=artifact_mask,
     )
 
     print("Measuring pore-size distribution...", flush=True)

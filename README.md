@@ -96,6 +96,12 @@ python pml_network_analysis.py \
 | `--mask-top` | off | Mask the topmost N pixels in every slice. Alias: `--artifact-y`. |
 | `--mask-bottom` | off | Mask the bottommost N pixels in every slice. Any combination of edge flags may be used. |
 
+Edge masks are applied only to the dense-region analysis (so that
+edge-reconstruction artefacts are not mis-classified as biological dense
+regions). The skeleton and pore-size analyses run on the full volume because
+the masked columns may sit inside the PML body and still contain real
+fibrous network on top of the artefact.
+
 Run `python pml_network_analysis.py --help` for the full list.
 
 ## Input requirements
