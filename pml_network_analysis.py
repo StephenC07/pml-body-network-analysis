@@ -301,7 +301,12 @@ def dense_distance_analysis(
     artifact_mask: np.ndarray | None = None,
 ) -> dict:
     """Compare distance-from-PML-surface for dense vs random bg pixels."""
-    rng = np.random.default_rng(seed)
+    # NOTE: uses the legacy global RandomState (np.random.seed + np.random.choice)
+    # rather than np.random.default_rng(). The two RNGs are different
+    # implementations (Mersenne Twister vs PCG64) and produce different
+    # samples from the same seed. The published paper numbers were generated
+    # with the legacy RNG; this implementation reproduces them exactly.
+    np.random.seed(seed)
     pml_dist = distance_transform_edt(~pml_mask)
     z_idx = np.where(pml_mask.sum(axis=(1, 2)) > 0)[0]
     if len(z_idx) == 0:
@@ -321,7 +326,7 @@ def dense_distance_analysis(
             exclude &= ~artifact_mask
         bg_pts = np.argwhere(exclude)
         if len(bg_pts) > bg_sample_per_slice:
-            idx = rng.choice(len(bg_pts), bg_sample_per_slice, replace=False)
+            idx = np.random.choice(len(bg_pts), bg_sample_per_slice, replace=False)
             for r, c in bg_pts[idx]:
                 bg.append(pml_dist[zi, r, c])
 
