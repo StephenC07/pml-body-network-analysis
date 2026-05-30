@@ -6,9 +6,9 @@ exclusion of high-contrast dense regions from the PML body interior.
 
 The pipeline accompanies:
 
-> Pražák V, Harley I, Boutell C, Thomason PA, Carlin LM, Davis BG, Kaufmann R,
-> Carter SD. *In situ molecular architecture of eYFP-PML.I bodies by cryo-CLEM
-> and cryo-electron tomography reveals trinucleosomes in an open state.*
+> Pražák V, Harley I, Falckenhayn J, Boutell C, Thomason PA, Davis BG,
+> Kaufmann R, Carter SD. *In situ molecular architecture of PML bodies reveals
+> columnar trinucleosomes in an open state selected by a porous mesh.*
 
 It reproduces the per-tomogram network quantification and the dense-region
 distance analysis described in the paper, without committing to any specific
