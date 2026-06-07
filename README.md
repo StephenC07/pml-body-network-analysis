@@ -11,8 +11,8 @@ The pipeline accompanies:
 > columnar trinucleosomes in an open state selected by a porous mesh.*
 
 It reproduces the per-tomogram network quantification and the dense-region
-distance analysis described in the paper, without committing to any specific
-dataset.
+inside/outside fraction analysis described in the paper, without committing to
+any specific dataset.
 
 ## What the pipeline does
 
@@ -36,9 +36,10 @@ For a single tomogram plus a paired PML body segmentation, the script
    composite connectivity score.
 9. Computes the Pearson correlation between per-tile connectivity and
    per-tile PML volume fraction.
-10. Computes the Euclidean distance from each dense pixel (bottom 15 percent
-    of a Gaussian-smoothed slice) to the nearest PML body surface voxel,
-    and compares the distribution to a size-matched random background sample.
+10. Identifies dense pixels (bottom 15 percent of a Gaussian-smoothed slice)
+    and computes the fraction of pixels classified as dense inside versus
+    outside the PML body, pooled across slices (an area-normalised depletion
+    measure).
 11. Measures the unbiased pore-size distribution of the skeletonised network:
     per-slice distance transform of the inverted skeleton, local maxima give
     inscribed-circle radii of the gaps between fibres. Reports the median,
@@ -118,15 +119,13 @@ All outputs are written into `--output-dir`:
 
 | File | Contents |
 |------|----------|
-| `summary.json` | All parameters, Pearson `r`, mean connectivity inside/outside the PML body, median dense/background distances in pixels and nm, pore-size statistics. |
+| `summary.json` | All parameters, Pearson `r`, mean connectivity inside/outside the PML body, inside/outside dense fraction and fold-depletion, pore-size statistics. |
 | `connectivity_grid.csv` | grid_n x grid_n composite connectivity score. |
 | `fiber_density_grid.csv` | Normalised fibre density per tile. |
 | `branch_density_grid.csv` | Normalised branch-point density per tile. |
 | `pml_volume_fraction_grid.csv` | PML volume fraction per tile. |
-| `distances_dense_px.csv` | Dense-pixel distances from the PML surface, in bin-4 pixels. |
-| `distances_background_px.csv` | Random background distances, in bin-4 pixels. |
 | `pore_diameters_nm.csv` | All measured pore diameters in nanometres. |
-| `diagnostic_figure.png` | Four-panel QC figure: connectivity overlay, PML volume fraction, connectivity vs PML volume fraction scatter, distance histogram. |
+| `diagnostic_figure.png` | Four-panel QC figure: connectivity overlay, PML volume fraction, connectivity vs PML volume fraction scatter, dense fraction inside vs outside. |
 | `pore_size_histogram.png` | Pore-diameter histogram with reference lines at nucleosome (11 nm), TRiC (17 nm) and PA28-capped proteasome (20 nm) diameters. |
 
 ## Importable API
@@ -141,7 +140,7 @@ from pml_network_analysis import (
     build_grid_connectivity,
     build_pml_volume_grid,
     dense_mask_slice,
-    dense_distance_analysis,
+    dense_fraction_inside_outside,
 )
 ```
 

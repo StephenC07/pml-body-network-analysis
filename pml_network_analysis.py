@@ -22,10 +22,10 @@ segmentation (multi-label TIFF), the pipeline:
        branches).
     9. Computes the Pearson correlation between per-cell connectivity
        and per-cell PML body volume fraction.
-   10. In parallel, computes the Euclidean distance of "dense"
-       pixels (bottom `--dense-pct` percent after a large Gaussian
-       blur) from the PML body surface, and compares that distribution
-       to a random background sample.
+   10. In parallel, identifies "dense" pixels (bottom `--dense-pct`
+       percent after a large Gaussian blur) and computes the fraction
+       of pixels classified as dense inside versus outside the PML body,
+       pooled across slices (an area-normalised depletion measure).
    11. Measures the unbiased pore-size distribution of the skeletonised
        network: per-slice distance transform of the inverted skeleton,
        local maxima give inscribed-circle radii of the gaps between
@@ -37,7 +37,7 @@ Outputs (written to --output-dir):
 
     summary.json
         Parameters used, per-grid-cell means, Pearson correlation,
-        median distances, pore-size statistics.
+        inside/outside dense fraction, pore-size statistics.
     connectivity_grid.csv
         grid_n x grid_n composite connectivity score.
     fiber_density_grid.csv
@@ -46,8 +46,6 @@ Outputs (written to --output-dir):
         grid_n x grid_n normalised branch-point density.
     pml_volume_fraction_grid.csv
         grid_n x grid_n PML volume fraction.
-    distances_dense_px.csv, distances_background_px.csv
-        Euclidean distance (bin-4 pixels) from the PML body surface.
     pore_diameters_nm.csv
         All measured pore diameters in nanometres.
     diagnostic_figure.png
@@ -108,10 +106,7 @@ DEFAULTS = {
     "fill_hole": 50,
     "fiber_weight": 0.6,
     "branch_weight": 0.4,
-    "random_seed": 42,
     "dense_z_step": 3,
-    "dense_subsample": 10,
-    "bg_sample_per_slice": 500,
 }
 
 
@@ -290,47 +285,45 @@ def dense_mask_slice(
     return mask
 
 
-def dense_distance_analysis(
+def dense_fraction_inside_outside(
     volume: np.ndarray,
     pml_mask: np.ndarray,
     dense_pct: float = DEFAULTS["dense_pct"],
     z_step: int = DEFAULTS["dense_z_step"],
-    dense_subsample: int = DEFAULTS["dense_subsample"],
-    bg_sample_per_slice: int = DEFAULTS["bg_sample_per_slice"],
-    seed: int = DEFAULTS["random_seed"],
     artifact_mask: np.ndarray | None = None,
 ) -> dict:
-    """Compare distance-from-PML-surface for dense vs random bg pixels."""
-    # NOTE: uses the legacy global RandomState (np.random.seed + np.random.choice)
-    # rather than np.random.default_rng(). The two RNGs are different
-    # implementations (Mersenne Twister vs PCG64) and produce different
-    # samples from the same seed. The published paper numbers were generated
-    # with the legacy RNG; this implementation reproduces them exactly.
-    np.random.seed(seed)
-    pml_dist = distance_transform_edt(~pml_mask)
+    """Fraction of pixels classified as dense, inside vs outside the PML body.
+
+    For every `z_step`-th slice through the PML body Z-range, the bottom
+    `dense_pct`% intensity mask is computed and the number of dense pixels is
+    counted separately inside and outside the segmented PML body. Counts are
+    pooled across slices, then divided by the corresponding total pixel counts
+    to give an area-normalised dense fraction for each region. Any
+    `artifact_mask` region (e.g. an edge reconstruction artefact) is excluded
+    from both the dense counts and the totals.
+    """
     z_idx = np.where(pml_mask.sum(axis=(1, 2)) > 0)[0]
     if len(z_idx) == 0:
-        return dict(dense=np.array([]), background=np.array([]))
+        return dict(dense_in=0, dense_out=0, total_in=0, total_out=0,
+                    frac_in=None, frac_out=None)
     z0, z1 = z_idx[0], z_idx[-1]
+    valid = None if artifact_mask is None else ~artifact_mask
 
-    dense, bg = [], []
+    dense_in = dense_out = total_in = total_out = 0
     for zi in range(z0, z1 + 1, z_step):
         dm = dense_mask_slice(volume[zi], pct=dense_pct, artifact_mask=artifact_mask)
-        dense_pts = np.argwhere(dm)
-        if len(dense_pts) > 0:
-            for r, c in dense_pts[::dense_subsample]:
-                dense.append(pml_dist[zi, r, c])
+        inside = pml_mask[zi] if valid is None else (pml_mask[zi] & valid)
+        outside = (~pml_mask[zi]) if valid is None else ((~pml_mask[zi]) & valid)
+        dense_in += int((dm & inside).sum())
+        dense_out += int((dm & outside).sum())
+        total_in += int(inside.sum())
+        total_out += int(outside.sum())
 
-        exclude = ~dm & ~pml_mask[zi]
-        if artifact_mask is not None:
-            exclude &= ~artifact_mask
-        bg_pts = np.argwhere(exclude)
-        if len(bg_pts) > bg_sample_per_slice:
-            idx = np.random.choice(len(bg_pts), bg_sample_per_slice, replace=False)
-            for r, c in bg_pts[idx]:
-                bg.append(pml_dist[zi, r, c])
-
-    return dict(dense=np.array(dense), background=np.array(bg))
+    frac_in = (dense_in / total_in) if total_in else None
+    frac_out = (dense_out / total_out) if total_out else None
+    return dict(dense_in=dense_in, dense_out=dense_out,
+                total_in=total_in, total_out=total_out,
+                frac_in=frac_in, frac_out=frac_out)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -389,7 +382,7 @@ def plot_diagnostic(
     pml_mask: np.ndarray,
     grid: dict,
     pml_grid: np.ndarray,
-    distances: dict,
+    dense_frac: dict,
     pearson_r: float,
     pixel_size_nm: float,
     out_path: Path,
@@ -398,7 +391,7 @@ def plot_diagnostic(
         A) connectivity heatmap with PML outline
         B) PML volume fraction grid
         C) scatter: connectivity vs PML volume fraction
-        D) distance-from-PML histogram (dense vs background)
+        D) dense fraction inside vs outside the PML body
     """
     ny, nx = volume.shape[1:]
     gh, gw = grid["gh"], grid["gw"]
@@ -448,27 +441,22 @@ def plot_diagnostic(
     axes[1, 0].legend()
     axes[1, 0].grid(alpha=0.3)
 
-    # D. Distance histogram
-    dense = distances["dense"]
-    bg = distances["background"]
-    if len(dense) and len(bg):
-        max_px = max(dense.max(), bg.max())
-        bins = np.arange(0, max_px + 10, 5)
-        axes[1, 1].hist(bg * pixel_size_nm, bins=bins * pixel_size_nm,
-                        alpha=0.4, color="gray", density=True, label="Background")
-        axes[1, 1].hist(dense * pixel_size_nm, bins=bins * pixel_size_nm,
-                        alpha=0.6, color="dodgerblue", density=True, label="Dense regions")
-        axes[1, 1].axvline(np.median(dense) * pixel_size_nm, color="dodgerblue",
-                           ls="--", lw=2,
-                           label=f"Dense median = {np.median(dense) * pixel_size_nm:.0f} nm")
-        axes[1, 1].axvline(np.median(bg) * pixel_size_nm, color="gray",
-                           ls="--", lw=2,
-                           label=f"Background median = {np.median(bg) * pixel_size_nm:.0f} nm")
-    axes[1, 1].set_xlabel("Distance from PML surface (nm)")
-    axes[1, 1].set_ylabel("Density")
-    axes[1, 1].set_title("D. Distance from PML surface")
-    axes[1, 1].legend(fontsize=8)
-    axes[1, 1].grid(alpha=0.3)
+    # D. Dense fraction inside vs outside the PML body
+    fin = dense_frac.get("frac_in")
+    fout = dense_frac.get("frac_out")
+    if fin is not None and fout is not None:
+        vals = [fin * 100, fout * 100]
+        bars = axes[1, 1].bar(["Inside PML", "Outside PML"], vals,
+                              color=["dodgerblue", "gray"])
+        for b, v in zip(bars, vals):
+            axes[1, 1].text(b.get_x() + b.get_width() / 2, v,
+                            f"{v:.1f}%", ha="center", va="bottom", fontsize=11)
+        title = "D. Dense fraction inside vs outside"
+        if fin > 0:
+            title += f"  ({fout / fin:.1f}x depletion)"
+        axes[1, 1].set_title(title)
+    axes[1, 1].set_ylabel("Pixels classified as dense (%)")
+    axes[1, 1].grid(alpha=0.3, axis="y")
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -629,8 +617,8 @@ def main(argv=None):
 
     pearson_r = float(np.corrcoef(grid["composite"].ravel(), pml_grid.ravel())[0, 1])
 
-    print("Computing dense-region distance analysis...", flush=True)
-    distances = dense_distance_analysis(
+    print("Computing dense-region inside/outside fraction...", flush=True)
+    dense_frac = dense_fraction_inside_outside(
         volume, pml_mask,
         dense_pct=args.dense_pct,
         artifact_mask=artifact_mask,
@@ -647,8 +635,6 @@ def main(argv=None):
     np.savetxt(out / "fiber_density_grid.csv", grid["fiber_norm"], delimiter=",", fmt="%.6f")
     np.savetxt(out / "branch_density_grid.csv", grid["branch_norm"], delimiter=",", fmt="%.6f")
     np.savetxt(out / "pml_volume_fraction_grid.csv", pml_grid, delimiter=",", fmt="%.6f")
-    np.savetxt(out / "distances_dense_px.csv", distances["dense"], delimiter=",", fmt="%.3f")
-    np.savetxt(out / "distances_background_px.csv", distances["background"], delimiter=",", fmt="%.3f")
     np.savetxt(out / "pore_diameters_nm.csv", pore_diameters_nm, delimiter=",", fmt="%.3f")
 
     summary = {
@@ -670,16 +656,13 @@ def main(argv=None):
         "mean_connectivity_non_pml_cells": float(
             grid["composite"][pml_grid == 0].mean()
         ) if (pml_grid == 0).any() else None,
-        "dense_distance_median_px": float(np.median(distances["dense"]))
-            if len(distances["dense"]) else None,
-        "background_distance_median_px": float(np.median(distances["background"]))
-            if len(distances["background"]) else None,
-        "dense_distance_median_nm": float(
-            np.median(distances["dense"]) * args.pixel_size_nm
-        ) if len(distances["dense"]) else None,
-        "background_distance_median_nm": float(
-            np.median(distances["background"]) * args.pixel_size_nm
-        ) if len(distances["background"]) else None,
+        "dense_fraction_inside": dense_frac["frac_in"],
+        "dense_fraction_outside": dense_frac["frac_out"],
+        "dense_fold_depletion_outside_over_inside": (
+            dense_frac["frac_out"] / dense_frac["frac_in"]
+        ) if dense_frac["frac_in"] else None,
+        "dense_counts": {k: dense_frac[k] for k in
+                         ("dense_in", "dense_out", "total_in", "total_out")},
         "pore_n": int(len(pore_diameters_nm)),
         "pore_median_diameter_nm": float(np.median(pore_diameters_nm))
             if len(pore_diameters_nm) else None,
@@ -700,7 +683,7 @@ def main(argv=None):
 
     print("Writing diagnostic figure...", flush=True)
     plot_diagnostic(
-        volume, pml_mask, grid, pml_grid, distances,
+        volume, pml_mask, grid, pml_grid, dense_frac,
         pearson_r=pearson_r,
         pixel_size_nm=args.pixel_size_nm,
         out_path=out / "diagnostic_figure.png",
@@ -714,10 +697,11 @@ def main(argv=None):
 
     print(f"\nDone.  Outputs in {out.resolve()}", flush=True)
     print(f"  Pearson r = {pearson_r:.3f}", flush=True)
-    if summary["dense_distance_median_nm"] is not None:
+    if summary["dense_fraction_inside"] is not None:
         print(
-            f"  Dense median = {summary['dense_distance_median_nm']:.0f} nm, "
-            f"bg median = {summary['background_distance_median_nm']:.0f} nm",
+            f"  Dense fraction inside = {summary['dense_fraction_inside']*100:.2f}%, "
+            f"outside = {summary['dense_fraction_outside']*100:.2f}% "
+            f"({summary['dense_fold_depletion_outside_over_inside']:.1f}x depletion)",
             flush=True,
         )
     if summary["pore_median_diameter_nm"] is not None:
