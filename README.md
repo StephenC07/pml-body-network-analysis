@@ -7,8 +7,8 @@ exclusion of high-contrast dense regions from the PML body interior.
 The pipeline accompanies:
 
 > Pražák V, Harley I, Falckenhayn J, Boutell C, Thomason PA, Davis BG,
-> Kaufmann R, Carter SD. *In situ molecular architecture of PML bodies reveals
-> columnar trinucleosomes in an open state selected by a porous mesh.*
+> Kaufmann R, Carter SD. *In situ architecture of PML nuclear bodies reveals a
+> porous, chromatin-permissive interior.* (submitted to Nature Cell Biology, 2026)
 
 It reproduces the per-tomogram network quantification and the dense-region
 inside/outside fraction analysis described in the paper, without committing to
@@ -147,3 +147,30 @@ from pml_network_analysis import (
 ## Licence
 
 MIT (see `LICENSE`).
+
+## Pipeline used for the submitted manuscript (`paper_pipeline/`, October 2026)
+
+The scripts in `paper_pipeline/` are the exact code behind Fig. 2 and
+Supplementary Fig. 1 of the submitted manuscript. They import the slice
+normalisation, denoising, CLAHE, black top-hat, thresholding and skeletonisation
+functions from `pml_network_analysis.py` unchanged, and add the steps described
+in the Methods:
+
+| Script | Purpose |
+|---|---|
+| `fibre_after_blob_removal.py` | Per-slice fibre skeleton density inside and outside the segmented body after masking dense clusters of 15 nm and larger (patch filled with local background plus matched noise). Masks a 60 px reconstruction-artefact strip at the right edge of every tomogram (`T_ALL`). Run with `isonet` or `raw`. |
+| `controls_fibre_denominator_bandpass.py` | Denominator and band-pass controls for the fibre ratio. |
+| `boundary_profile.py`, `boundary_profile_rm15.py` | Dense coverage, large-cluster density and skeleton density in 10 nm shells from -120 to +150 nm around the body boundary, and the 20 nm erosion/dilation test (20 iterations of a cross-shaped structuring element, ratios as means over slices of per-slice fractions). |
+| `boundary_shift_sweep.py` | Boundary shift sweep from 10 to 50 nm (only the 20 nm result is reported). |
+| `body_vs_body_fibre.py` | Per-slice interior fibre density compared between the five bodies (Kruskal-Wallis). |
+| `fig2bc_panels.py`, `fig2_assemble_with_render.py` | Fig. 2 panels and assembly. |
+| `fig_supp2_assemble_600dpi.py` | Supplementary Fig. 1 assembly. |
+| `rerun_rightmask_2026-10-25.sh` | The order in which the scripts were run for the submitted numbers. |
+
+Paths to the tomograms, segmentations and output folders are hard-coded at the
+top of each script and must be edited for another machine. Tomogram and
+segmentation files are not part of this repository.
+
+Note: the pore-size measurement (step 11 above) and the composite connectivity
+score are not used in the submitted manuscript, which reports skeleton density,
+strand length and dense-cluster depletion only.
