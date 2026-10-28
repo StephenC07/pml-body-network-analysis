@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Single supplementary figure supporting Fig. 2:
+"""Supplementary Fig. 1 (file name from an earlier draft numbering), supporting Fig. 2:
 a-d  the other four bodies (TS_01, TS_08, TS_15, TS_16): central slice + dense clusters by size
-e    robustness: cluster ratio (nucleoplasm / body) per size class on IsoNet and on raw tomograms
+e-g  fibre strand length, boundary-shift test, and cluster ratio (nucleoplasm / body) per size
+     class on IsoNet and on raw tomograms
 """
 import json, sys
 import numpy as np
@@ -16,7 +17,7 @@ sys.path.insert(0, "/Users/stephencarter/Desktop/Transfer_to_Mac_PML_NCB/pml-net
 import fibre_after_blob_removal as F
 PIX = F.PIX; K, SIG = 1.0, 5.0
 R = "/Users/stephencarter/Desktop/Transfer_to_Mac_PML_NCB/pml-network-density-accounted/results_v2/"; OUT = "/Users/stephencarter/Desktop/Transfer_to_Mac_PML_NCB/pml-network-density-accounted/figures/"
-FB = json.load(open(R + "fibre_after_blob_removal_isonet.json")); TM = json.load(open(R + "tile_matched_connectivity.json"))
+FB = json.load(open(R + "fibre_after_blob_removal_isonet.json"))
 C2 = {src: json.load(open(R + f"controls_fibre_denominator_bandpass_{src}.json")) for src in ("isonet", "raw")}
 BODIES = list(F.T); OTHERS = ["TS_01", "TS_08", "TS_15", "TS_16"]; MK = dict(TS_01="o", TS_03="s", TS_08="^", TS_15="D", TS_16="v"); BLUE, RED = "#1f4e79", "#8b1a1a"
 CLASSES = ["6 to 15", "15 to 20", "20 to 30", "> 30"]; GROUPS = [(0, 2), (2, 3), (3, 5), (5, 8)]; SIZE_EDGES = [6, 15, 20, 30, 1000]; COLS = ["#f2c14e", "#1b9e77", "#e7298a", "#1f1f8f"]
@@ -82,7 +83,7 @@ for src, col, lab, off in (("isonet", BLUE, "IsoNet denoised", -0.17), ("raw", "
     vals = np.array(vals)
     di = np.array([[ni_[a:b].sum() / AREA[t][0] for a, b in GROUPS] for t, ni_ in zip(BODIES, [np.array(C2[src][t]["control2"]["bandpass"]["n_in"]) for t in BODIES])])
     do = np.array([[no_[a:b].sum() / AREA[t][1] for a, b in GROUPS] for t, no_ in zip(BODIES, [np.array(C2[src][t]["control2"]["bandpass"]["n_out"]) for t in BODIES])])
-    m = do.mean(axis=0) / di.mean(axis=0)   # ratio of five-body means, as in Fig. 2b
+    m = do.mean(axis=0) / di.mean(axis=0)   # ratio of five-body means, as in Fig. 2c
     axF.bar(x + off, m, 0.32, color="white", edgecolor=col, lw=0.9, label=lab)
     for k, t in enumerate(BODIES):
         axF.plot(x + off, vals[k], MK[t], color=col, ms=3, mfc="white", mew=0.7, ls="none")

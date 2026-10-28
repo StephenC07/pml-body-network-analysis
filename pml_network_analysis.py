@@ -55,9 +55,9 @@ Outputs (written to --output-dir):
         TRiC and PA28-capped-proteasome sizes.
 
 Reference:
-    Pražák V et al. In situ molecular architecture of eYFP-PML.I
-    bodies by cryo-CLEM and cryo-electron tomography reveals
-    trinucleosomes in an open state.
+    Pražák V et al. In situ architecture of PML nuclear bodies reveals
+    a porous, chromatin-permissive interior (submitted to Nature Cell
+    Biology, 2026).
 
 Example:
     python pml_network_analysis.py \\

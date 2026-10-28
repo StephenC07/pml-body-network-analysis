@@ -10,9 +10,10 @@ The pipeline accompanies:
 > Kaufmann R, Carter SD. *In situ architecture of PML nuclear bodies reveals a
 > porous, chromatin-permissive interior.* (submitted to Nature Cell Biology, 2026)
 
-It reproduces the per-tomogram network quantification and the dense-region
-inside/outside fraction analysis described in the paper, without committing to
-any specific dataset.
+The base script (`pml_network_analysis.py`) is the general network pipeline.
+The analyses reported in the paper (band-passed dense-cluster detection,
+fibre skeleton density after cluster masking, boundary profiles and shift
+tests) are in `paper_pipeline/`, described below.
 
 ## What the pipeline does
 
@@ -39,7 +40,8 @@ For a single tomogram plus a paired PML body segmentation, the script
 10. Identifies dense pixels (bottom 15 percent of a Gaussian-smoothed slice)
     and computes the fraction of pixels classified as dense inside versus
     outside the PML body, pooled across slices (an area-normalised depletion
-    measure).
+    measure). This simple threshold is superseded in the paper by the
+    band-passed, noise-referenced cluster detection in `paper_pipeline/`.
 11. Measures the unbiased pore-size distribution of the skeletonised network:
     per-slice distance transform of the inverted skeleton, local maxima give
     inscribed-circle radii of the gaps between fibres. Reports the median,
@@ -159,17 +161,20 @@ in the Methods:
 | Script | Purpose |
 |---|---|
 | `fibre_after_blob_removal.py` | Per-slice fibre skeleton density inside and outside the segmented body after masking dense clusters of 15 nm and larger (patch filled with local background plus matched noise). Masks a 60 px reconstruction-artefact strip at the right edge of every tomogram (`T_ALL`). Run with `isonet` or `raw`. |
-| `controls_fibre_denominator_bandpass.py` | Denominator and band-pass controls for the fibre ratio. |
+| `controls_fibre_denominator_bandpass.py` | Band-passed dense-cluster counts by size class (source of Fig. 2c and of the raw versus IsoNet comparison in Supplementary Fig. 1g) and denominator controls for the fibre ratio. |
 | `boundary_profile.py`, `boundary_profile_rm15.py` | Dense coverage, large-cluster density and skeleton density in 10 nm shells from -120 to +150 nm around the body boundary, and the 20 nm erosion/dilation test (20 iterations of a cross-shaped structuring element, ratios as means over slices of per-slice fractions). |
 | `boundary_shift_sweep.py` | Boundary shift sweep from 10 to 50 nm (only the 20 nm result is reported). |
-| `body_vs_body_fibre.py` | Per-slice interior fibre density compared between the five bodies (Kruskal-Wallis). |
+| `body_vs_body_fibre.py` | Per-slice interior fibre density compared between the five bodies (exploratory; the test is not reported in the paper). |
 | `fig2bc_panels.py`, `fig2_assemble_with_render.py` | Fig. 2 panels and assembly. |
-| `fig_supp2_assemble_600dpi.py` | Supplementary Fig. 1 assembly. |
+| `fig_supp2_assemble_600dpi.py` | Supplementary Fig. 1 assembly (the file name is from an earlier draft numbering). |
 | `rerun_rightmask_2026-10-25.sh` | The order in which the scripts were run for the submitted numbers. |
 
 Paths to the tomograms, segmentations and output folders are hard-coded at the
 top of each script and must be edited for another machine. Tomogram and
-segmentation files are not part of this repository.
+segmentation files are not part of this repository. Tilt-series and tomograms will be
+deposited in EMPIAR, and the PML body segmentations are available from the
+corresponding author. The Fig. 2a ChimeraX render is read as a PNG and is not
+included.
 
 Note: the pore-size measurement (step 11 above) and the composite connectivity
 score are not used in the submitted manuscript, which reports skeleton density,

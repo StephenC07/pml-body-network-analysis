@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Fig. 2b: dense clusters per um^2 inside vs outside by size class, five bodies (band-passed
-detection, every 3rd slice through the body).  Fig. 2c: dense coverage and >20 nm clusters vs
-distance from the CLEM boundary, five bodies + mean.  Same style as Fig. 2a."""
+"""Fig. 2c: dense clusters per um^2 inside vs outside by size class, five bodies (band-passed
+detection, every 3rd slice through the body).  Fig. 2d: dense coverage and >20 nm clusters vs
+distance from the CLEM boundary, five bodies + mean.  Same style as Fig. 2b."""
 import json, sys
 import numpy as np
 import matplotlib; matplotlib.use("Agg")

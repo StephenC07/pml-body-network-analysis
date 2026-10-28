@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Assemble Figure 2 WITH the ChimeraX isosurface render as panel a (b to f = former a to e). 180 x 225 mm.
-Derived from fig2_assemble.py (unchanged); output Figure2_with_render.png/.pdf.
-a: TS_03 central slice (rotated ROT degrees to match Fig. 1) + dense clusters by size
-b: clusters per um^2 by size class, five bodies
-c: dense coverage and >20 nm clusters vs distance from the boundary
-d: fibre skeleton crops inside / nucleoplasm
-e: fibre skeleton per volume (bar) + fibre profile across the boundary
+"""Assemble Figure 2 with the ChimeraX isosurface render of TS_03 as panel a. 180 x 225 mm.
+Output Figure2_with_render.png/.pdf. The render PNG is not part of this repository.
+a: ChimeraX render of the TS_03 body with mapped particles
+b: TS_03 central slice (rotated ROT degrees to match Fig. 1) + dense clusters by size
+c: clusters per um^2 by size class, five bodies
+d: dense coverage and >20 nm clusters vs distance from the boundary
+e: fibre skeleton crops inside / nucleoplasm
+f: fibre skeleton per area (bar) + fibre profile across the boundary
 usage: fig2_assemble.py [ROT degrees, default 180]
 """
 import json, sys

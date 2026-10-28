@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fibre (fine-texture) analysis after progressive removal of dense blobs, five bodies.
 
-Blob detection: as blob_size_exclusion.py (IsoNet tomograms, sigma 5 px, noise-referenced
+Blob detection: IsoNet tomograms, sigma 5 px, noise-referenced
 K = 1.0, closed + filled, size = equivalent diameter). Blobs are REMOVED by replacing their
 pixels with the local background (sigma-10 blurred image) plus matched noise, so the
 skeleton pipeline cannot trace them.
@@ -13,10 +13,9 @@ Steps (cumulative):
   3  blobs >= 15 nm removed
   4  blobs >=  6 nm removed  (all detected blobs)
 
-Fibre measure: the paper's pipeline (pml_network_analysis.segment_slice) on every 3rd slice
-through the body Z range -> skeleton density and branch density per 12x12 tile -> the
-paper's composite score; reported as mean score in PML tiles vs non-PML tiles, Pearson r
-against PML fraction, and raw skeleton density inside vs outside (px per px).
+Fibre measure: pml_network_analysis.segment_slice on every 3rd slice through the body Z
+range. The paper reports raw skeleton density inside vs outside (px per px) and strand length;
+the tile composite score and Pearson r also written out here are not used in the paper.
 """
 import json, sys
 import numpy as np
